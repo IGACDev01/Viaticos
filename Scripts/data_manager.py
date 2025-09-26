@@ -5,15 +5,17 @@ from typing import Dict, List, Optional, Tuple
 import streamlit as st
 from supabase import create_client, Client
 
+
 class SupabaseDBManager:
-    """Supabase database manager for commission orders system"""
-
-    def __init__(self):
+    def __init__(self, use_service_role=False):
         self.supabase_url = st.secrets["SUPABASE_URL"]
-        self.supabase_key = self.st.secrets["SUPABASE_KEY"]
 
-        if not self.supabase_url or not self.supabase_key:
-            raise ValueError("Supabase credentials not found in environment variables")
+        if use_service_role:
+            # Admin operations
+            self.supabase_key = st.secrets["SUPABASE_SERVICE_KEY"]
+        else:
+            # User operations with RLS
+            self.supabase_key = st.secrets["SUPABASE_ANON_KEY"]
 
         self.client: Client = create_client(self.supabase_url, self.supabase_key)
 
@@ -621,13 +623,12 @@ def init_database_session():
     """Initialize Supabase database in session state"""
     if 'database_manager' not in st.session_state:
         try:
-            st.session_state.database_manager = SupabaseDBManager()
+            st.session_state.database_manager = SupabaseDBManager(use_service_role=True)
             st.session_state.database_connected = True
-            # Load initial data
             st.session_state.excel_data = st.session_state.database_manager.get_all_orders_df()
         except Exception as e:
             st.session_state.database_connected = False
-            st.error(f"Error connecting to Supabase: {str(e)}")
+            st.error(f"🔍 Debug Error: {str(e)}")
 
 
 def get_funcionario(numero_identificacion: str) -> Optional[Dict]:

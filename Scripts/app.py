@@ -188,7 +188,7 @@ def main():
     # Main title
     st.markdown("""
     <div class="main-header">
-        <h1>🧭 Sistema de Registro de Órdenes (Supabase)</h1>
+        <h1>🧭 Sistema de Registro de Órdenes</h1>
     </div>
     """, unsafe_allow_html=True)
 
@@ -275,7 +275,7 @@ def render_cached_database_status():
 
 def render_admin_tab():
     """Render administration tab for database management with Supabase"""
-    st.markdown('<h1 class="main-title">⚙️ Administración de Base de Datos (Supabase)</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-title">⚙️ Administración de Base de Datos</h1>', unsafe_allow_html=True)
 
     if 'database_manager' not in st.session_state:
         st.error("Base de datos no inicializada")
