@@ -7,8 +7,5 @@
 # Ignore all files and folders within the "Docs" folder
 /Docs/**
 
-# Ignore all files and folders within the "Streamlit" folder
-/.streamlit/**
-
 # Ignore all files and folders within the "Idea" folder
 /.idea/**
