@@ -16,6 +16,21 @@ def render_commission_form_tab():
     # Main title
     st.markdown('<h1 class="main-title">📋 Registro de Órdenes de Comisión</h1>', unsafe_allow_html=True)
 
+    # Quick refresh button
+    col_refresh1, col_refresh2, col_refresh3 = st.columns([1, 2, 1])
+    with col_refresh2:
+        if st.button("🔄 Actualizar datos desde Supabase", key="refresh_commission_form", use_container_width=True):
+            with st.spinner("Actualizando datos desde Supabase..."):
+                success, message = st.session_state.database_manager.refresh_data()
+                if success:
+                    st.session_state.excel_data = st.session_state.database_manager.get_all_orders_df()
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.error(message)
+
+    st.markdown("---")
+
     # Render the form
     render_commission_form()
 
@@ -314,7 +329,7 @@ def render_form_fields(form_id, form_prefix):
         # Submit button
         col_center = st.columns([1, 2, 1])
         with col_center[1]:
-            submitted = st.form_submit_button("💾 Registrar en Supabase", use_container_width=True)
+            submitted = st.form_submit_button("💾 Registrar", use_container_width=True)
 
         # Form validation and processing
         if submitted:
