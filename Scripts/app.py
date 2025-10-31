@@ -6,9 +6,11 @@ import os
 # Import tab modules using Supabase
 from tab_commission_form import render_commission_form_tab
 from tab_legalization_form import render_additional_form_tab
+from tab_edit_order import render_edit_order_tab
 from tab_dashboard import render_dashboard_tab
 from utils import initialize_session_state, get_colombian_datetime_now
 from data_manager import render_database_status, init_database_session
+from auth import initialize_auth_session, is_authenticated, render_login_page, render_user_info
 
 # Page configuration
 st.set_page_config(
@@ -182,8 +184,19 @@ def get_cached_database_status():
 
 
 def main():
+    # Initialize authentication session
+    initialize_auth_session()
+
+    # Check if user is authenticated
+    if not is_authenticated():
+        render_login_page()
+        return
+
     # Initialize session state
     initialize_session_state()
+
+    # Show user info in sidebar
+    render_user_info()
 
     # Main title
     st.markdown("""
@@ -201,7 +214,7 @@ def main():
     # Create segmented control for navigation
     tab = st.segmented_control(
         "Navegación",
-        ["📋 Órdenes de Comisión", "📝 Legalización", "📊 Dashboard", "⚙️ Administración"],
+        ["📋 Órdenes de Comisión", "📝 Legalización", "✏️ Editar Orden", "📊 Dashboard", "⚙️ Administración"],
         selection_mode="single",
         default="📋 Órdenes de Comisión",
         label_visibility="collapsed",
@@ -216,6 +229,9 @@ def main():
 
     elif tab == "📝 Legalización":
         render_additional_form_tab()
+
+    elif tab == "✏️ Editar Orden":
+        render_edit_order_tab()
 
     elif tab == "📊 Dashboard":
         render_dashboard_tab()

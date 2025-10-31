@@ -564,19 +564,44 @@ class SupabaseDBManager:
 
             for index, row in df.iterrows():
                 try:
+                    # Helper function to convert dates properly
+                    def convert_date_value(val):
+                        """Convert any date value (timestamp, string, number) to DD/MM/YYYY string"""
+                        if pd.isna(val) or val == '' or val == 0:
+                            return ''
+
+                        try:
+                            # If it's a pandas Timestamp or datetime
+                            if hasattr(val, 'strftime'):
+                                return val.strftime('%d/%m/%Y')
+                            # If it's a string
+                            elif isinstance(val, str):
+                                return val.strip() if val.strip() else ''
+                            # If it's a number (timestamp in milliseconds or seconds)
+                            elif isinstance(val, (int, float)):
+                                if val > 1e10:  # Likely milliseconds
+                                    dt = pd.Timestamp(val, unit='ms')
+                                else:  # Likely seconds
+                                    dt = pd.Timestamp(val, unit='s')
+                                return dt.strftime('%d/%m/%Y')
+                            else:
+                                str_val = str(val).strip()
+                                return str_val if str_val else ''
+                        except:
+                            return str(val).strip() if str(val).strip() else ''
+
                     # Prepare basic commission data (required fields)
                     commission_data = {
                         'numero_orden': int(row['numero_orden']),
                         'sede': str(row['sede']).upper() if pd.notna(row['sede']) else '',
-                        'fecha_elaboracion': str(row['fecha_elaboracion']) if pd.notna(
-                            row['fecha_elaboracion']) else '',
-                        'fecha_memorando': str(row['fecha_memorando']) if pd.notna(row['fecha_memorando']) else '',
-                        'radicado_memorando': str(row.get('radicado_memorando', '')) if pd.notna(
+                        'fecha_elaboracion': convert_date_value(row['fecha_elaboracion']),
+                        'fecha_memorando': convert_date_value(row['fecha_memorando']),
+                        'radicado_memorando': str(row.get('radicado_memorando', '')).strip().upper() if pd.notna(
                             row.get('radicado_memorando', '')) else '',
                         'rec': int(row['rec']) if pd.notna(row['rec']) else 0,
-                        'id_rubro': str(row.get('id_rubro', '')) if pd.notna(row.get('id_rubro', '')) else '',
-                        'fecha_inicial': str(row['fecha_inicial']) if pd.notna(row['fecha_inicial']) else '',
-                        'fecha_final': str(row['fecha_final']) if pd.notna(row['fecha_final']) else '',
+                        'id_rubro': str(row.get('id_rubro', '')).strip().upper() if pd.notna(row.get('id_rubro', '')) else '',
+                        'fecha_inicial': convert_date_value(row['fecha_inicial']),
+                        'fecha_final': convert_date_value(row['fecha_final']),
                         'numero_dias': int(row['numero_dias']) if pd.notna(row['numero_dias']) else 0,
                         'valor_viaticos_diario': float(row['valor_viaticos_diario']) if pd.notna(
                             row['valor_viaticos_diario']) else 0.0,
@@ -607,8 +632,7 @@ class SupabaseDBManager:
 
                     # Add legalization data if present
                     legalization_fields = {
-                        'fecha_legalizacion': str(row.get('fecha_legalizacion', '')) if pd.notna(
-                            row.get('fecha_legalizacion', '')) else '',
+                        'fecha_legalizacion': convert_date_value(row.get('fecha_legalizacion', '')),
                         'numero_legalizacion': int(row.get('numero_legalizacion', 0)) if pd.notna(
                             row.get('numero_legalizacion', 0)) and str(
                             row.get('numero_legalizacion', 0)) != '' else None,
