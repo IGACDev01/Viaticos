@@ -4,6 +4,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils.dataframe import dataframe_to_rows
 import os
 from datetime import datetime
+from utils import get_colombian_datetime_now
 
 os.chdir("C:/Users/jsval/OneDrive/Documents/Work/IGAC/Viaticos/")
 
@@ -255,7 +256,7 @@ def create_summary_sheet(wb, df, sheet_names):
 
     row += 1
     summary_ws[f'A{row}'] = "Fecha de consolidación:"
-    summary_ws[f'B{row}'] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    summary_ws[f'B{row}'] = get_colombian_datetime_now()
 
     row += 1
     summary_ws[f'A{row}'] = "Total de registros:"
