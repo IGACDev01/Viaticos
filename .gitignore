@@ -1,11 +1,92 @@
-# Streamlit secrets
+# Streamlit secrets and config
 .streamlit/secrets.toml
+.streamlit/*.json
+.streamlit/config.toml
 
-# Ignore all files and folders within the "Data" folder
+# Project data folders (user-generated files)
 /Data/**
-
-# Ignore all files and folders within the "Docs" folder
 /Docs/**
 
-# Ignore all files and folders within the "Idea" folder
+# IDE and editor files
 /.idea/**
+/.vscode/**
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE pycache
+.idea/__pycache__/
+Scripts/.idea/__pycache__/
+
+# Streamlit cache and logs
+.streamlit/cache/
+.streamlit/cache_control/
+.cache
+*.log
+data_manager.log
+data_migration.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+*.tmp
+*.temp
+*temp*
+*.bak
+*.backup
+
+# Node modules (if any frontend integration)
+node_modules/
+npm-debug.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
