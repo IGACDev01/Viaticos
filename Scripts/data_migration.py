@@ -3,10 +3,23 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils.dataframe import dataframe_to_rows
 import os
+import logging
 from datetime import datetime
 from utils import get_colombian_datetime_now
 
-os.chdir("C:/Users/jsval/OneDrive/Documents/Work/IGAC/Viaticos/")
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Get the directory where this script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Get the parent directory (Viaticos folder)
+PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
+# Change to project directory if needed for relative paths
+# os.chdir(PROJECT_DIR)  # Uncomment if needed for relative path operations
 
 def consolidate_excel_sheets(input_file, output_file=None):
     """
@@ -20,11 +33,12 @@ def consolidate_excel_sheets(input_file, output_file=None):
         str: Ruta del archivo consolidado creado
     """
 
-    print("🔄 Iniciando consolidación de archivo Excel...")
-    print(f"📂 Archivo de entrada: {input_file}")
+    logger.info("🔄 Iniciando consolidación de archivo Excel...")
+    logger.info(f"📂 Archivo de entrada: {input_file}")
 
     # Verificar que el archivo existe
     if not os.path.exists(input_file):
+        logger.error(f"El archivo {input_file} no existe")
         raise FileNotFoundError(f"El archivo {input_file} no existe")
 
     # Crear nombre de archivo de salida si no se proporciona
@@ -38,13 +52,13 @@ def consolidate_excel_sheets(input_file, output_file=None):
         excel_file = pd.ExcelFile(input_file)
         all_sheets = excel_file.sheet_names
 
-        print(f"📊 Hojas encontradas: {len(all_sheets)}")
-        print(f"📋 Nombres de hojas: {all_sheets}")
+        logger.info(f"📊 Hojas encontradas: {len(all_sheets)}")
+        logger.info(f"📋 Nombres de hojas: {all_sheets}")
 
         # Filtrar hojas que no son de datos (excluir LIST y hojas similares)
         data_sheets = [sheet for sheet in all_sheets if sheet.upper() not in ['LIST', 'SUMMARY', 'RESUMEN', 'INDEX']]
 
-        print(f"📈 Hojas de datos a procesar: {len(data_sheets)}")
+        logger.info(f"📈 Hojas de datos a procesar: {len(data_sheets)}")
 
         # Lista para almacenar todos los datos consolidados
         consolidated_data = []
@@ -53,7 +67,7 @@ def consolidate_excel_sheets(input_file, output_file=None):
 
         # Procesar cada hoja
         for i, sheet_name in enumerate(data_sheets):
-            print(f"🔄 Procesando hoja {i + 1}/{len(data_sheets)}: {sheet_name}")
+            logger.info(f"🔄 Procesando hoja {i + 1}/{len(data_sheets)}: {sheet_name}")
 
             try:
                 # Leer la hoja actual
@@ -67,7 +81,7 @@ def consolidate_excel_sheets(input_file, output_file=None):
                         break
 
                 if header_row is None:
-                    print(f"⚠️  No se encontraron encabezados válidos en {sheet_name}, saltando...")
+                    logger.warning(f"⚠️  No se encontraron encabezados válidos en {sheet_name}, saltando...")
                     continue
 
                 # Releer la hoja usando la fila de encabezados correcta
@@ -83,7 +97,7 @@ def consolidate_excel_sheets(input_file, output_file=None):
                     df = df.dropna(subset=id_columns, how='all')
 
                 if df.empty:
-                    print(f"⚠️  No hay datos válidos en {sheet_name}, saltando...")
+                    logger.warning(f"⚠️  No hay datos válidos en {sheet_name}, saltando...")
                     continue
 
                 # Agregar columna SEDE al inicio
@@ -93,21 +107,21 @@ def consolidate_excel_sheets(input_file, output_file=None):
                 if not headers_set:
                     headers = list(df.columns)
                     headers_set = True
-                    print(f"📋 Encabezados establecidos: {len(headers)} columnas")
+                    logger.info(f"📋 Encabezados establecidos: {len(headers)} columnas")
 
                 # Asegurar que todas las hojas tengan las mismas columnas
                 current_headers = list(df.columns)
                 if current_headers != headers:
-                    print(f"⚠️  Ajustando columnas para {sheet_name}")
+                    logger.warning(f"⚠️  Ajustando columnas para {sheet_name}")
                     # Reindexar para que coincidan las columnas
                     df = df.reindex(columns=headers)
 
                 # Agregar los datos al consolidado
                 consolidated_data.append(df)
-                print(f"✅ {sheet_name}: {len(df)} registros agregados")
+                logger.info(f"✅ {sheet_name}: {len(df)} registros agregados")
 
             except Exception as e:
-                print(f"❌ Error procesando {sheet_name}: {str(e)}")
+                logger.error(f"❌ Error procesando {sheet_name}: {str(e)}")
                 continue
 
         # Verificar que tenemos datos para consolidar
@@ -115,11 +129,11 @@ def consolidate_excel_sheets(input_file, output_file=None):
             raise ValueError("No se encontraron datos válidos para consolidar")
 
         # Concatenar todos los DataFrames
-        print("🔄 Consolidando todos los datos...")
+        logger.info("🔄 Consolidando todos los datos...")
         final_df = pd.concat(consolidated_data, ignore_index=True)
 
         # Limpiar y formatear datos finales
-        print("🧹 Limpiando datos finales...")
+        logger.info("🧹 Limpiando datos finales...")
 
         # Rellenar valores NaN con cadenas vacías para mejor presentación
         final_df = final_df.fillna('')
@@ -131,10 +145,13 @@ def consolidate_excel_sheets(input_file, output_file=None):
 
         for col in numeric_columns:
             if col in final_df.columns:
-                final_df[col] = pd.to_numeric(final_df[col], errors='coerce').fillna(0)
+                try:
+                    final_df[col] = pd.to_numeric(final_df[col], errors='coerce').fillna(0)
+                except (ValueError, TypeError):
+                    continue
 
         # Crear archivo Excel con formato profesional
-        print("📝 Creando archivo Excel con formato profesional...")
+        logger.info("📝 Creando archivo Excel con formato profesional...")
 
         # Crear workbook y worksheet
         wb = openpyxl.Workbook()
@@ -155,28 +172,28 @@ def consolidate_excel_sheets(input_file, output_file=None):
         wb.save(output_file)
 
         # Mostrar estadísticas finales
-        print("\n" + "=" * 60)
-        print("✅ CONSOLIDACIÓN COMPLETADA EXITOSAMENTE")
-        print("=" * 60)
-        print(f"📁 Archivo creado: {output_file}")
-        print(f"📊 Total de hojas procesadas: {len(data_sheets)}")
-        print(f"📈 Total de registros: {len(final_df):,}")
-        print(f"📋 Total de columnas: {len(final_df.columns)}")
-        print(f"💾 Tamaño del archivo: {os.path.getsize(output_file) / (1024 * 1024):.2f} MB")
+        logger.info("\n" + "=" * 60)
+        logger.info("✅ CONSOLIDACIÓN COMPLETADA EXITOSAMENTE")
+        logger.info("=" * 60)
+        logger.info(f"📁 Archivo creado: {output_file}")
+        logger.info(f"📊 Total de hojas procesadas: {len(data_sheets)}")
+        logger.info(f"📈 Total de registros: {len(final_df):,}")
+        logger.info(f"📋 Total de columnas: {len(final_df.columns)}")
+        logger.info(f"💾 Tamaño del archivo: {os.path.getsize(output_file) / (1024 * 1024):.2f} MB")
 
         # Mostrar estadísticas por sede
-        print("\n📊 REGISTROS POR SEDE:")
-        print("-" * 40)
+        logger.info("\n📊 REGISTROS POR SEDE:")
+        logger.info("-" * 40)
         sede_counts = final_df['SEDE'].value_counts().sort_values(ascending=False)
         for sede, count in sede_counts.items():
-            print(f"  {sede}: {count:,} registros")
+            logger.info(f"  {sede}: {count:,} registros")
 
-        print(f"\n🎯 Archivo Excel consolidado creado exitosamente: {output_file}")
+        logger.info(f"\n🎯 Archivo Excel consolidado creado exitosamente: {output_file}")
 
         return output_file
 
     except Exception as e:
-        print(f"❌ Error durante la consolidación: {str(e)}")
+        logger.error(f"❌ Error durante la consolidación: {str(e)}")
         raise
 
 def apply_professional_formatting(ws, df):
@@ -296,27 +313,27 @@ def create_summary_sheet(wb, df, sheet_names):
 def main():
     """Función principal para ejecutar la consolidación"""
 
-    # Configurar el nombre del archivo
-    input_file = "Data/02_REPORTE VIATICOS DT 2025.xlsx"
+    # Configurar el nombre del archivo usando rutas relativas al proyecto
+    input_file = os.path.join(PROJECT_DIR, "Data", "02_REPORTE VIATICOS DT 2025.xlsx")
 
-    print("🚀 CONSOLIDADOR DE EXCEL - REPORTE VIÁTICOS DT 2025")
-    print("=" * 60)
+    logger.info("🚀 CONSOLIDADOR DE EXCEL - REPORTE VIÁTICOS DT 2025")
+    logger.info("=" * 60)
 
     try:
         # Verificar que el archivo existe
         if not os.path.exists(input_file):
-            print(f"❌ Error: El archivo '{input_file}' no se encuentra en el directorio actual.")
-            print("📁 Asegúrate de que el archivo esté en la misma carpeta que este script.")
+            logger.error(f"❌ Error: El archivo '{input_file}' no se encuentra.")
+            logger.error(f"📁 Verifica que exista la carpeta Data en: {PROJECT_DIR}")
             return
 
         # Ejecutar consolidación
         output_file = consolidate_excel_sheets(input_file)
 
-        print(f"\n🎉 ¡Consolidación completada exitosamente!")
-        print(f"📁 Archivo creado: {output_file}")
+        logger.info(f"\n🎉 ¡Consolidación completada exitosamente!")
+        logger.info(f"📁 Archivo creado: {output_file}")
 
     except Exception as e:
-        print(f"❌ Error durante la ejecución: {str(e)}")
+        logger.error(f"❌ Error durante la ejecución: {str(e)}")
         raise
 
 

@@ -33,7 +33,7 @@ def format_colombian_date(date_value) -> str:
 
         # Return in DD/MM/YYYY format
         return date_obj.strftime('%d/%m/%Y')
-    except:
+    except (ValueError, TypeError, AttributeError):
         return str(date_value).strip()
 
 
@@ -53,7 +53,7 @@ def format_colombian_datetime(datetime_value) -> str:
             datetime_obj = pd.to_datetime(datetime_value)
 
         return datetime_obj.strftime('%d/%m/%Y %H:%M:%S')
-    except:
+    except (ValueError, TypeError, AttributeError):
         return str(datetime_value).strip()
 
 
@@ -91,7 +91,7 @@ def parse_colombian_date(date_str: str) -> Optional[str]:
         date_obj = pd.to_datetime(date_str, dayfirst=True)
         # Return as ISO format for database storage
         return date_obj.strftime('%Y-%m-%d')
-    except:
+    except (ValueError, TypeError):
         return None
 
 
@@ -114,7 +114,7 @@ def parse_date_for_database(date_value) -> Optional[str]:
         date_obj = pd.to_datetime(date_value, dayfirst=True)
         # Return as ISO format for database
         return date_obj.strftime('%Y-%m-%d')
-    except:
+    except (ValueError, TypeError):
         return None
 
 
@@ -147,7 +147,7 @@ def format_colombian_date_verbose(date_value) -> str:
         day_name = colombian_day_names()[date_obj.weekday()]
         month_name = colombian_month_names()[date_obj.month]
         return f"{day_name}, {date_obj.day} de {month_name} de {date_obj.year}"
-    except:
+    except (ValueError, TypeError, IndexError):
         return str(date_value).strip()
 
 
@@ -226,7 +226,7 @@ def parse_date_flexible(date_value):
     try:
         formatted = format_colombian_date(date_str)
         return formatted if formatted else None
-    except:
+    except (ValueError, TypeError):
         return None
 
 def calculate_days_between_dates(start_date_str, end_date_str):
@@ -235,11 +235,11 @@ def calculate_days_between_dates(start_date_str, end_date_str):
         # Parse dates
         start_date = pd.to_datetime(start_date_str, dayfirst=True)
         end_date = pd.to_datetime(end_date_str, dayfirst=True)
-        
+
         # Calculate difference
         delta = end_date - start_date
         return max(0, delta.days + 1)  # +1 to include both start and end dates
-    except:
+    except (ValueError, TypeError):
         return 0
 
 

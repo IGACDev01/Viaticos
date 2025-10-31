@@ -1,10 +1,22 @@
 import os
+import logging
 import pandas as pd
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Tuple
 import streamlit as st
 from supabase import create_client, Client
 from utils import parse_date_for_database, format_colombian_date
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('data_manager.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 class SupabaseDBManager:
@@ -20,15 +32,18 @@ class SupabaseDBManager:
 
         self.client: Client = create_client(self.supabase_url, self.supabase_key)
 
-    def calculate_business_days(self, start_date: str, end_date: str) -> int:
-        """Calculate business days between two dates excluding holidays"""
+        # Cache for holidays to reduce database queries
+        self._holidays_cache: Optional[List[date]] = None
+        self._cache_timestamp: Optional[datetime] = None
+        self._cache_ttl_seconds: int = 3600  # Cache holidays for 1 hour
+
+    def _get_holidays_from_db(self) -> List[date]:
+        """Fetch holidays from database and convert to date objects"""
         try:
-            # Get holidays from database
             response = self.client.table('festivos').select('fecha').execute()
             holidays_data = response.data
-
-            # Convert holidays to datetime objects
             holidays = []
+
             for holiday in holidays_data:
                 try:
                     holiday_date = holiday['fecha']
@@ -36,8 +51,38 @@ class SupabaseDBManager:
                         holidays.append(datetime.strptime(holiday_date, '%Y-%m-%d').date())
                     else:
                         holidays.append(datetime.strptime(holiday_date, '%d/%m/%Y').date())
-                except:
+                except (ValueError, KeyError, TypeError):
                     continue
+
+            return holidays
+        except Exception as e:
+            logger.warning(f"Could not fetch holidays from database: {str(e)}")
+            return []
+
+    def _get_holidays_cached(self) -> List[date]:
+        """Get holidays with caching mechanism"""
+        now = datetime.now()
+
+        # Check if cache is valid
+        if (self._holidays_cache is not None and
+            self._cache_timestamp is not None and
+            (now - self._cache_timestamp).total_seconds() < self._cache_ttl_seconds):
+            logger.debug("Using cached holidays")
+            return self._holidays_cache
+
+        # Fetch from database and cache
+        logger.info("Fetching holidays from database and caching")
+        holidays = self._get_holidays_from_db()
+        self._holidays_cache = holidays
+        self._cache_timestamp = now
+
+        return holidays
+
+    def calculate_business_days(self, start_date: str, end_date: str) -> int:
+        """Calculate business days between two dates excluding holidays"""
+        try:
+            # Get holidays using cache (more efficient)
+            holidays = self._get_holidays_cached()
 
             # Convert string dates to datetime objects
             if '/' in start_date:
@@ -57,28 +102,15 @@ class SupabaseDBManager:
 
             return business_days
 
-        except Exception as e:
-            print(f"Error calculating business days: {str(e)}")
+        except (ValueError, KeyError, AttributeError) as e:
+            logger.error(f"Error calculating business days: {str(e)}")
             return 0
 
     def calculate_workday(self, start_date: str, days: int) -> str:
         """Calculate workday (WORKDAY.INTL equivalent) excluding weekends and holidays"""
         try:
-            # Get holidays from database
-            response = self.client.table('festivos').select('fecha').execute()
-            holidays_data = response.data
-
-            # Convert holidays to datetime objects
-            holidays = []
-            for holiday in holidays_data:
-                try:
-                    holiday_date = holiday['fecha']
-                    if '-' in holiday_date:
-                        holidays.append(datetime.strptime(holiday_date, '%Y-%m-%d').date())
-                    else:
-                        holidays.append(datetime.strptime(holiday_date, '%d/%m/%Y').date())
-                except:
-                    continue
+            # Get holidays using cache (more efficient)
+            holidays = self._get_holidays_cached()
 
             # Convert start date
             if '/' in start_date:
@@ -96,8 +128,8 @@ class SupabaseDBManager:
 
             return current.strftime('%d/%m/%Y')
 
-        except Exception as e:
-            print(f"Error calculating workday: {str(e)}")
+        except (ValueError, KeyError, AttributeError) as e:
+            logger.error(f"Error calculating workday: {str(e)}")
             return ""
 
     def calculate_formulated_fields(self, order_data: Dict) -> Dict:
@@ -130,7 +162,7 @@ class SupabaseDBManager:
                     total_days = self.calculate_business_days(fecha_inicial, formulated['fecha_limite_legalizacion'])
                     elapsed_days = self.calculate_business_days(fecha_inicial, today)
                     formulated['plazo_restante_legalizacion'] = total_days - elapsed_days
-                except:
+                except (ValueError, TypeError, AttributeError):
                     formulated['plazo_restante_legalizacion'] = None
 
             # Alerta
@@ -154,7 +186,7 @@ class SupabaseDBManager:
                             'estado_legalizacion'] = 'A tiempo' if legalizacion_date <= limite_date else 'Atrasado'
                     else:
                         formulated['estado_legalizacion'] = 'A tiempo'
-                except:
+                except (ValueError, KeyError, TypeError):
                     formulated['estado_legalizacion'] = 'A tiempo'
             else:
                 try:
@@ -164,7 +196,7 @@ class SupabaseDBManager:
                         formulated['estado_legalizacion'] = 'Atrasado' if today > limite_date else 'A tiempo'
                     else:
                         formulated['estado_legalizacion'] = 'A tiempo'
-                except:
+                except (ValueError, KeyError, TypeError):
                     formulated['estado_legalizacion'] = 'A tiempo'
 
             # Valor Orden Legalizado
@@ -176,7 +208,7 @@ class SupabaseDBManager:
                 formulated['valor_orden_legalizado'] = None
 
         except Exception as e:
-            print(f"Error calculating formulated fields: {str(e)}")
+            logger.error(f"Error calculating formulated fields: {str(e)}")
             formulated = {
                 'fecha_reintegro': '',
                 'fecha_limite_legalizacion': '',
@@ -199,7 +231,7 @@ class SupabaseDBManager:
             return None
 
         except Exception as e:
-            print(f"Error getting funcionario: {str(e)}")
+            logger.error(f"Error getting funcionario: {str(e)}")
             return None
 
     def save_funcionario(self, numero_identificacion: int, primer_nombre: str,
@@ -340,7 +372,7 @@ class SupabaseDBManager:
             return response.data
 
         except Exception as e:
-            print(f"Error searching orders: {str(e)}")
+            logger.error(f"Error searching orders: {str(e)}")
             return []
 
     def update_legalization(self, numero_orden: int, legalization_data: Dict) -> Tuple[bool, str]:
@@ -454,7 +486,7 @@ class SupabaseDBManager:
             return df
 
         except Exception as e:
-            print(f"Error getting orders DataFrame: {str(e)}")
+            logger.error(f"Error getting orders DataFrame: {str(e)}")
             return pd.DataFrame()
 
     def get_order_by_number(self, numero_orden: int) -> Optional[Dict]:
@@ -467,7 +499,7 @@ class SupabaseDBManager:
             return None
 
         except Exception as e:
-            print(f"Error getting order: {str(e)}")
+            logger.error(f"Error getting order: {str(e)}")
             return None
 
     def export_to_excel(self, filename: str = None) -> str:
@@ -515,7 +547,7 @@ class SupabaseDBManager:
             return filename
 
         except Exception as e:
-            print(f"Error exporting to Excel: {str(e)}")
+            logger.error(f"Error exporting to Excel: {str(e)}")
             return None
 
     def import_from_excel(self, excel_file, sheet_name: str = 'Data') -> Tuple[bool, str]:
