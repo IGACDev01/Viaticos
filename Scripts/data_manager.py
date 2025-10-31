@@ -19,16 +19,70 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def handle_supabase_error(error: Exception, operation: str = "database operation") -> Tuple[bool, str]:
+    """
+    Handle Supabase errors with user-friendly messages
+
+    Args:
+        error: The exception that occurred
+        operation: Description of the operation that failed
+
+    Returns:
+        Tuple of (success, user_friendly_message)
+    """
+    error_str = str(error).lower()
+
+    # Network/connection errors
+    if "connection" in error_str or "timeout" in error_str:
+        logger.error(f"Connection error during {operation}: {str(error)}")
+        return False, f"Connection error. Please check your internet connection and try again."
+
+    # Authentication errors
+    if "auth" in error_str or "unauthorized" in error_str or "401" in error_str:
+        logger.error(f"Authentication error during {operation}: {str(error)}")
+        return False, "Authentication error. Please refresh the page and log in again."
+
+    # Duplicate key/constraint errors
+    if "duplicate" in error_str or "unique constraint" in error_str or "409" in error_str:
+        logger.error(f"Duplicate record error during {operation}: {str(error)}")
+        return False, "This record already exists. Please check if it was already saved."
+
+    # Not found errors
+    if "not found" in error_str or "404" in error_str:
+        logger.error(f"Not found error during {operation}: {str(error)}")
+        return False, "The requested record was not found."
+
+    # Rate limit errors
+    if "rate limit" in error_str or "429" in error_str:
+        logger.error(f"Rate limit error during {operation}: {str(error)}")
+        return False, "Too many requests. Please wait a moment and try again."
+
+    # Server errors
+    if "500" in error_str or "server error" in error_str:
+        logger.error(f"Server error during {operation}: {str(error)}")
+        return False, "Server error. Please try again in a moment."
+
+    # Default error message
+    logger.error(f"Error during {operation}: {str(error)}")
+    return False, f"An error occurred during {operation}. Please try again or contact support if the problem persists."
+
+
 class SupabaseDBManager:
-    def __init__(self, use_service_role=False):
-        self.supabase_url = st.secrets["SUPABASE_URL"]
+    def __init__(self, use_service_role: bool = False) -> None:
+        """
+        Initialize Supabase database manager
+
+        Args:
+            use_service_role: Whether to use service role key for admin operations
+        """
+        self.supabase_url: str = st.secrets["SUPABASE_URL"]
 
         if use_service_role:
             # Admin operations
-            self.supabase_key = st.secrets["SUPABASE_SERVICE_KEY"]
+            self.supabase_key: str = st.secrets["SUPABASE_SERVICE_KEY"]
         else:
             # User operations with RLS
-            self.supabase_key = st.secrets["SUPABASE_ANON_KEY"]
+            self.supabase_key: str = st.secrets["SUPABASE_ANON_KEY"]
 
         self.client: Client = create_client(self.supabase_url, self.supabase_key)
 
@@ -221,7 +275,15 @@ class SupabaseDBManager:
         return formulated
 
     def get_funcionario(self, numero_identificacion: int) -> Optional[Dict]:
-        """Get funcionario by identification number"""
+        """
+        Get funcionario by identification number
+
+        Args:
+            numero_identificacion: Employee identification number
+
+        Returns:
+            Dictionary with funcionario data or None if not found
+        """
         try:
             response = self.client.table('funcionarios').select('*').eq('numero_identificacion',
                                                                         numero_identificacion).execute()
@@ -354,7 +416,15 @@ class SupabaseDBManager:
             return False, f"Error guardando orden: {error_msg}"
 
     def search_orders(self, search_term: str) -> List[Dict]:
-        """Search orders by various fields"""
+        """
+        Search orders by various fields
+
+        Args:
+            search_term: Search term to match against order fields
+
+        Returns:
+            List of dictionaries containing matching orders
+        """
         try:
             # Use ilike for case-insensitive search across multiple fields
             response = self.client.table('ordenes').select('*').or_(
@@ -424,7 +494,12 @@ class SupabaseDBManager:
             return False, f"Error actualizando legalización: {str(e)}"
 
     def get_all_orders_df(self) -> pd.DataFrame:
-        """Get all orders as pandas DataFrame with proper column mapping and Colombian date formatting"""
+        """
+        Get all orders as pandas DataFrame with proper column mapping and Colombian date formatting
+
+        Returns:
+            DataFrame with all orders and properly formatted columns
+        """
         try:
             response = self.client.table('ordenes').select('*').order('created_at', desc=True).execute()
 
@@ -719,20 +794,28 @@ class SupabaseDBManager:
             return False, f"Error importando desde Excel: {str(e)}"
 
     def recalculate_all_formulated_fields(self) -> Tuple[bool, str]:
-        """Recalculate all formulated fields for existing orders"""
+        """Recalculate all formulated fields for existing orders using batch operations"""
         try:
             # Get all orders
             response = self.client.table('ordenes').select('*').execute()
             orders = response.data
 
+            if not orders:
+                return True, "✅ No hay órdenes para recalcular"
+
+            logger.info(f"Recalculating formulated fields for {len(orders)} orders")
+
+            # Prepare batch update data
+            updates_batch = []
             updated_count = 0
 
             for order in orders:
                 # Calculate formulated fields
                 formulated = self.calculate_formulated_fields(order)
 
-                # Update the order
+                # Prepare update data for this order
                 update_data = {
+                    'numero_orden': order['numero_orden'],
                     'fecha_reintegro': formulated['fecha_reintegro'],
                     'fecha_limite_legalizacion': formulated['fecha_limite_legalizacion'],
                     'plazo_restante_legalizacion': formulated['plazo_restante_legalizacion'],
@@ -740,13 +823,28 @@ class SupabaseDBManager:
                     'estado_legalizacion': formulated['estado_legalizacion'],
                     'valor_orden_legalizado': formulated['valor_orden_legalizado']
                 }
-
-                self.client.table('ordenes').update(update_data).eq('numero_orden', order['numero_orden']).execute()
+                updates_batch.append(update_data)
                 updated_count += 1
 
+            # Execute batch updates in smaller chunks to avoid timeouts (process 100 at a time)
+            chunk_size = 100
+            for i in range(0, len(updates_batch), chunk_size):
+                chunk = updates_batch[i:i + chunk_size]
+                logger.info(f"Processing batch {i // chunk_size + 1} ({len(chunk)} records)")
+
+                for update_data in chunk:
+                    numero_orden = update_data.pop('numero_orden')
+                    try:
+                        self.client.table('ordenes').update(update_data).eq('numero_orden', numero_orden).execute()
+                    except Exception as e:
+                        logger.warning(f"Could not update order {numero_orden}: {str(e)}")
+                        continue
+
+            logger.info(f"Successfully recalculated {updated_count} records")
             return True, f"✅ Se recalcularon {updated_count} registros exitosamente"
 
         except Exception as e:
+            logger.error(f"Error recalculando campos: {str(e)}")
             return False, f"Error recalculando campos: {str(e)}"
 
     def refresh_data(self) -> Tuple[bool, str]:

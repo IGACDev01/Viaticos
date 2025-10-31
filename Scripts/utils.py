@@ -229,6 +229,104 @@ def parse_date_flexible(date_value):
     except (ValueError, TypeError):
         return None
 
+
+def parse_date_to_datetime(date_value, dayfirst: bool = True):
+    """
+    Unified date parsing function that handles multiple formats
+
+    Args:
+        date_value: Date in any format (string, datetime, date, timestamp, etc.)
+        dayfirst: Prefer day-first format (DD/MM/YYYY) for ambiguous dates
+
+    Returns:
+        datetime object or None if parsing fails
+    """
+    if pd.isna(date_value) or date_value == "" or date_value is None:
+        return None
+
+    try:
+        # Try to parse using pandas (handles most formats)
+        return pd.to_datetime(date_value, dayfirst=dayfirst).to_pydatetime()
+    except (ValueError, TypeError):
+        return None
+
+
+def parse_date_to_date(date_value, dayfirst: bool = True) -> Optional:
+    """
+    Unified date parsing function that handles multiple formats and returns date object
+
+    Args:
+        date_value: Date in any format (string, datetime, date, timestamp, etc.)
+        dayfirst: Prefer day-first format (DD/MM/YYYY) for ambiguous dates
+
+    Returns:
+        date object or None if parsing fails
+    """
+    datetime_obj = parse_date_to_datetime(date_value, dayfirst=dayfirst)
+    if datetime_obj:
+        return datetime_obj.date()
+    return None
+
+def safe_int(value, default: int = 0) -> int:
+    """
+    Safely convert a value to integer with default fallback
+
+    Args:
+        value: Value to convert (any type)
+        default: Default value if conversion fails
+
+    Returns:
+        Integer value or default if conversion fails
+    """
+    if pd.isna(value) or value == "" or value is None:
+        return default
+
+    try:
+        return int(float(value))
+    except (ValueError, TypeError):
+        return default
+
+
+def safe_float(value, default: float = 0.0) -> float:
+    """
+    Safely convert a value to float with default fallback
+
+    Args:
+        value: Value to convert (any type)
+        default: Default value if conversion fails
+
+    Returns:
+        Float value or default if conversion fails
+    """
+    if pd.isna(value) or value == "" or value is None:
+        return default
+
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def safe_str(value, default: str = "") -> str:
+    """
+    Safely convert a value to string with default fallback
+
+    Args:
+        value: Value to convert (any type)
+        default: Default value if conversion fails
+
+    Returns:
+        String value or default if conversion fails
+    """
+    if pd.isna(value) or value is None:
+        return default
+
+    try:
+        return str(value).strip()
+    except (ValueError, TypeError):
+        return default
+
+
 def calculate_days_between_dates(start_date_str, end_date_str):
     """Calculate number of days between two date strings"""
     try:
@@ -271,3 +369,53 @@ def get_sede_options():
         "Guajira", "Huila", "Norte de Santander", "Meta", "Nariño", "Quindio",
         "Risaralda", "Sucre", "Santander", "Tolima", "Valle del Cauca"
     ]
+
+
+def render_success_message_section(title: str, subtitle: str = "", show_button: bool = False,
+                                   button_label: str = "", button_key: str = "") -> bool:
+    """
+    Render a standardized success message section
+
+    Args:
+        title: Success message title
+        subtitle: Additional subtitle text
+        show_button: Whether to show an action button
+        button_label: Label for the button
+        button_key: Unique key for the button (required for Streamlit)
+
+    Returns:
+        True if button was clicked, False otherwise
+    """
+    import streamlit as st
+
+    st.markdown('<div class="success-section">', unsafe_allow_html=True)
+
+    col_success1, col_success2 = st.columns([2, 1])
+
+    with col_success1:
+        st.success(title)
+        if subtitle:
+            st.write(subtitle)
+
+    button_clicked = False
+    if show_button and button_label and button_key:
+        with col_success2:
+            button_clicked = st.button(button_label, key=button_key, use_container_width=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    return button_clicked
+
+
+def render_section_title(text: str, emoji: str = ""):
+    """
+    Render a standardized section title
+
+    Args:
+        text: Title text
+        emoji: Optional emoji to prepend
+    """
+    import streamlit as st
+
+    full_text = f"{emoji} {text}" if emoji else text
+    st.markdown(f'<div class="section-title">{full_text}</div>', unsafe_allow_html=True)
