@@ -4,152 +4,6 @@ import os
 import shutil
 from datetime import datetime
 import re
-import locale
-from typing import Optional
-
-# Colombian date/time formatting functions
-def format_colombian_date(date_value) -> str:
-    """
-    Format date to Colombian format: DD/MM/YYYY (without time)
-    Accepts: datetime objects, date objects, or date strings in various formats
-    Returns: String in DD/MM/YYYY format
-    """
-    if pd.isna(date_value) or date_value == "" or date_value is None:
-        return ""
-
-    try:
-        # If it's already a string
-        if isinstance(date_value, str):
-            # Check if it already looks like DD/MM/YYYY
-            if len(date_value) == 10 and date_value[2] == '/' and date_value[5] == '/':
-                # Already in correct format
-                return date_value.strip()
-
-            # Try to parse the string
-            date_obj = pd.to_datetime(date_value)
-        else:
-            # Convert to datetime if it's not already
-            date_obj = pd.to_datetime(date_value)
-
-        # Return in DD/MM/YYYY format
-        return date_obj.strftime('%d/%m/%Y')
-    except:
-        return str(date_value).strip()
-
-
-def format_colombian_datetime(datetime_value) -> str:
-    """
-    Format datetime to Colombian format: DD/MM/YYYY HH:MM:SS
-    Accepts: datetime objects or datetime strings
-    Returns: String in DD/MM/YYYY HH:MM:SS format
-    """
-    if pd.isna(datetime_value) or datetime_value == "" or datetime_value is None:
-        return ""
-
-    try:
-        if isinstance(datetime_value, str):
-            datetime_obj = pd.to_datetime(datetime_value)
-        else:
-            datetime_obj = pd.to_datetime(datetime_value)
-
-        return datetime_obj.strftime('%d/%m/%Y %H:%M:%S')
-    except:
-        return str(datetime_value).strip()
-
-
-def get_colombian_date_now() -> str:
-    """
-    Get current date in Colombian format: DD/MM/YYYY
-    Returns: String in DD/MM/YYYY format
-    """
-    return datetime.now().strftime('%d/%m/%Y')
-
-
-def get_colombian_datetime_now() -> str:
-    """
-    Get current datetime in Colombian format: DD/MM/YYYY HH:MM:SS
-    Returns: String in DD/MM/YYYY HH:MM:SS format
-    """
-    return datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-
-
-def parse_colombian_date(date_str: str) -> Optional[str]:
-    """
-    Parse Colombian format date (DD/MM/YYYY) and return as ISO format (YYYY-MM-DD) for database storage
-    This ensures compatibility with Supabase date storage
-
-    Args:
-        date_str: Date string in various formats
-
-    Returns:
-        ISO format date string (YYYY-MM-DD) or None if cannot parse
-    """
-    if pd.isna(date_str) or date_str == "" or date_str is None:
-        return None
-
-    try:
-        date_obj = pd.to_datetime(date_str, dayfirst=True)
-        # Return as ISO format for database storage
-        return date_obj.strftime('%Y-%m-%d')
-    except:
-        return None
-
-
-def parse_date_for_database(date_value) -> Optional[str]:
-    """
-    Parse any date format and return as ISO format (YYYY-MM-DD) for database storage
-    This ensures compatibility with Supabase date fields
-
-    Args:
-        date_value: Date in any format (string, datetime object, etc.)
-
-    Returns:
-        ISO format date string (YYYY-MM-DD) or None
-    """
-    if pd.isna(date_value) or date_value == "" or date_value is None:
-        return None
-
-    try:
-        # Parse the date with day-first preference
-        date_obj = pd.to_datetime(date_value, dayfirst=True)
-        # Return as ISO format for database
-        return date_obj.strftime('%Y-%m-%d')
-    except:
-        return None
-
-
-def colombian_day_names():
-    """Get Colombian Spanish day names"""
-    return ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
-
-
-def colombian_month_names():
-    """Get Colombian Spanish month names"""
-    return ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
-
-
-def format_colombian_date_verbose(date_value) -> str:
-    """
-    Format date to verbose Colombian format: Lunes, 30 de Enero de 2025
-
-    Args:
-        date_value: Date in any format
-
-    Returns:
-        Verbose formatted date string in Colombian Spanish
-    """
-    if pd.isna(date_value) or date_value == "" or date_value is None:
-        return ""
-
-    try:
-        date_obj = pd.to_datetime(date_value)
-        day_name = colombian_day_names()[date_obj.weekday()]
-        month_name = colombian_month_names()[date_obj.month]
-        return f"{day_name}, {date_obj.day} de {month_name} de {date_obj.year}"
-    except:
-        return str(date_value).strip()
-
 
 def format_currency(value):
     """Format currency with Colombian format: 1.234.567,89"""
@@ -209,25 +63,42 @@ def parse_colombian_currency(value):
         return 0.0
 
 def parse_date_flexible(date_value):
-    """
-    Parse date with multiple format support and return in DD/MM/YYYY format
-    Uses the format_colombian_date function to ensure consistency
-    """
+    """Parse date with multiple format support"""
     if pd.isna(date_value) or date_value == "" or date_value is None:
         return None
-
+    
     # Convert to string
     date_str = str(date_value).strip()
-
+    
     if not date_str or date_str.lower() in ['nan', 'none', '0']:
         return None
-
-    # Use the Colombian date formatter for consistency
+    
+    # Try different date formats
+    date_formats = [
+        '%d/%m/%Y',      # 30/05/2025
+        '%m/%d/%y',      # 1/14/25 
+        '%m/%d/%Y',      # 1/14/2025
+        '%d/%m/%y',      # 14/1/25
+        '%Y-%m-%d',      # 2025-01-14
+        '%d-%m-%Y',      # 14-01-2025
+        '%d/%m/%Y %H:%M:%S',  # With time
+        '%m/%d/%Y %H:%M:%S'   # US format with time
+    ]
+    
+    for fmt in date_formats:
+        try:
+            parsed_date = pd.to_datetime(date_str, format=fmt)
+            # Convert to DD/MM/YYYY format string
+            return parsed_date.strftime('%d/%m/%Y')
+        except (ValueError, TypeError):
+            continue
+    
+    # Try pandas auto-parsing as last resort
     try:
-        formatted = format_colombian_date(date_str)
-        return formatted if formatted else None
+        parsed_date = pd.to_datetime(date_str, dayfirst=True, errors='raise')
+        return parsed_date.strftime('%d/%m/%Y')
     except:
-        return None
+        return date_str  # Return original if can't parse
 
 def calculate_days_between_dates(start_date_str, end_date_str):
     """Calculate number of days between two date strings"""

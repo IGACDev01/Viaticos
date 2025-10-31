@@ -16,21 +16,6 @@ def render_additional_form_tab():
     # Main title
     st.markdown('<h1 class="main-title">📝 Seguimiento y Legalización de Órdenes</h1>', unsafe_allow_html=True)
 
-    # Quick refresh button
-    col_refresh1, col_refresh2, col_refresh3 = st.columns([1, 2, 1])
-    with col_refresh2:
-        if st.button("🔄 Actualizar datos desde Supabase", key="refresh_legalization_form", use_container_width=True):
-            with st.spinner("Actualizando datos desde Supabase..."):
-                success, message = st.session_state.database_manager.refresh_data()
-                if success:
-                    st.session_state.excel_data = st.session_state.database_manager.get_all_orders_df()
-                    st.success(message)
-                    st.rerun()
-                else:
-                    st.error(message)
-
-    st.markdown("---")
-
     # Show connection status
     st.success("✅ Conectado a Supabase")
 

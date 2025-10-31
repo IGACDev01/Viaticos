@@ -4,7 +4,6 @@ from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Tuple
 import streamlit as st
 from supabase import create_client, Client
-from utils import parse_date_for_database, format_colombian_date
 
 
 class SupabaseDBManager:
@@ -226,41 +225,11 @@ class SupabaseDBManager:
         except Exception as e:
             return False, f"Error guardando funcionario: {str(e)}"
 
-    def standardize_dates(self, date_fields: Dict) -> Dict:
-        """
-        Standardize date fields for database storage
-        Converts all dates to YYYY-MM-DD format (ISO) for Supabase
-        Returns None for empty/null values instead of empty strings
-        """
-        standardized = {}
-        for field_name, date_value in date_fields.items():
-            if date_value and str(date_value).strip():
-                # First convert to Colombian format for display, then to ISO for storage
-                colombian_format = format_colombian_date(date_value)
-                iso_format = parse_date_for_database(date_value)
-                # Store in ISO format for database, or None if parsing failed
-                standardized[field_name] = iso_format if iso_format else None
-            else:
-                # Return None for empty values instead of empty string
-                standardized[field_name] = None
-        return standardized
-
     def save_commission_order(self, commission_data: Dict) -> Tuple[bool, str]:
         """Save commission order with automatic field calculations"""
         try:
-            # Standardize all date fields to YYYY-MM-DD (ISO) format for database
-            date_fields = {
-                'fecha_elaboracion': commission_data.get('fecha_elaboracion', ''),
-                'fecha_memorando': commission_data.get('fecha_memorando', ''),
-                'fecha_inicial': commission_data.get('fecha_inicial', ''),
-                'fecha_final': commission_data.get('fecha_final', '')
-            }
-            standardized_dates = self.standardize_dates(date_fields)
-
-            # Calculate formulated fields using standardized dates
-            formulated_input = commission_data.copy()
-            formulated_input.update(standardized_dates)
-            formulated = self.calculate_formulated_fields(formulated_input)
+            # Calculate formulated fields
+            formulated = self.calculate_formulated_fields(commission_data)
 
             # Check if funcionario exists, if not create it
             funcionario_exists = self.get_funcionario(commission_data['numero_identificacion'])
@@ -273,32 +242,26 @@ class SupabaseDBManager:
                     commission_data['segundo_apellido']
                 )
 
-            # Prepare order data with standardized dates
-            # Convert empty strings to None for optional fields
-            radicado_memorando = commission_data.get('radicado_memorando', '')
-            id_rubro = commission_data.get('id_rubro', '')
-            otros_nombres = commission_data.get('otros_nombres', '')
-            segundo_apellido = commission_data.get('segundo_apellido', '')
-
+            # Prepare order data
             order_data = {
                 'numero_orden': commission_data['numero_orden'],
                 'sede': commission_data['sede'],
-                'fecha_elaboracion': standardized_dates['fecha_elaboracion'],
-                'fecha_memorando': standardized_dates['fecha_memorando'],
-                'radicado_memorando': radicado_memorando if radicado_memorando else None,
+                'fecha_elaboracion': commission_data['fecha_elaboracion'],
+                'fecha_memorando': commission_data['fecha_memorando'],
+                'radicado_memorando': commission_data.get('radicado_memorando', ''),
                 'rec': commission_data['rec'],
-                'id_rubro': id_rubro if id_rubro else None,
-                'fecha_inicial': standardized_dates['fecha_inicial'],
-                'fecha_final': standardized_dates['fecha_final'],
+                'id_rubro': commission_data.get('id_rubro', ''),
+                'fecha_inicial': commission_data['fecha_inicial'],
+                'fecha_final': commission_data['fecha_final'],
                 'numero_dias': commission_data['numero_dias'],
                 'valor_viaticos_diario': commission_data['valor_viaticos_diario'],
                 'valor_viaticos_orden': commission_data['valor_viaticos_orden'],
                 'valor_gastos_orden': commission_data['valor_gastos_orden'],
                 'numero_identificacion': commission_data['numero_identificacion'],
                 'primer_nombre': commission_data['primer_nombre'],
-                'otros_nombres': otros_nombres if otros_nombres else None,
+                'otros_nombres': commission_data['otros_nombres'],
                 'primer_apellido': commission_data['primer_apellido'],
-                'segundo_apellido': segundo_apellido if segundo_apellido else None,
+                'segundo_apellido': commission_data['segundo_apellido'],
                 'fecha_reintegro': formulated['fecha_reintegro'],
                 'fecha_limite_legalizacion': formulated['fecha_limite_legalizacion'],
                 'plazo_restante_legalizacion': formulated['plazo_restante_legalizacion'],
@@ -354,13 +317,6 @@ class SupabaseDBManager:
 
             current_order = response.data[0]
 
-            # Standardize the legalization date if provided
-            if 'fecha_legalizacion' in legalization_data and legalization_data['fecha_legalizacion']:
-                standardized_date = self.standardize_dates({
-                    'fecha_legalizacion': legalization_data['fecha_legalizacion']
-                })
-                legalization_data['fecha_legalizacion'] = standardized_date.get('fecha_legalizacion', '')
-
             # Update with new legalization data
             current_order.update(legalization_data)
 
@@ -392,7 +348,7 @@ class SupabaseDBManager:
             return False, f"Error actualizando legalización: {str(e)}"
 
     def get_all_orders_df(self) -> pd.DataFrame:
-        """Get all orders as pandas DataFrame with proper column mapping and Colombian date formatting"""
+        """Get all orders as pandas DataFrame with proper column mapping"""
         try:
             response = self.client.table('ordenes').select('*').order('created_at', desc=True).execute()
 
@@ -436,16 +392,6 @@ class SupabaseDBManager:
 
             # Rename columns to match original Excel
             df = df.rename(columns=column_mapping)
-
-            # Convert date columns to Colombian format for display (DD/MM/YYYY)
-            date_columns = [
-                'Fecha de Elaboración', 'Fecha Memorando', 'Fecha Inicial', 'Fecha Final',
-                'Fecha Reintegro', 'Fecha Límite Legalización', 'Fecha Legalización'
-            ]
-
-            for col in date_columns:
-                if col in df.columns:
-                    df[col] = df[col].apply(format_colombian_date)
 
             # Remove metadata columns
             metadata_columns = ['id', 'created_at', 'updated_at']
@@ -595,16 +541,6 @@ class SupabaseDBManager:
                             row.get('segundo_apellido', '')) else ''
                     }
 
-                    # Standardize dates before saving (this will convert to ISO format and handle empty values as None)
-                    date_fields = {
-                        'fecha_elaboracion': commission_data['fecha_elaboracion'],
-                        'fecha_memorando': commission_data['fecha_memorando'],
-                        'fecha_inicial': commission_data['fecha_inicial'],
-                        'fecha_final': commission_data['fecha_final']
-                    }
-                    standardized_dates = self.standardize_dates(date_fields)
-                    commission_data.update(standardized_dates)
-
                     # Add legalization data if present
                     legalization_fields = {
                         'fecha_legalizacion': str(row.get('fecha_legalizacion', '')) if pd.notna(
@@ -622,24 +558,12 @@ class SupabaseDBManager:
                             row.get('valor_gastos_legalizado', 0)) != '' else None
                     }
 
-                    # Standardize legalization date if present (returns None for empty values)
-                    standardized_leg_date = self.standardize_dates({
-                        'fecha_legalizacion': legalization_fields['fecha_legalizacion']
-                    })
-                    legalization_fields['fecha_legalizacion'] = standardized_leg_date.get('fecha_legalizacion')
-
-                    # Clean empty strings and zeros to None for optional fields
+                    # Clean empty strings to None for optional legalization fields
                     for key, value in legalization_fields.items():
                         if value == '' or value == 0:
                             legalization_fields[key] = None
 
                     commission_data.update(legalization_fields)
-
-                    # Convert empty strings to None for optional string fields
-                    optional_string_fields = ['radicado_memorando', 'id_rubro', 'otros_nombres', 'segundo_apellido']
-                    for field in optional_string_fields:
-                        if field in commission_data and commission_data[field] == '':
-                            commission_data[field] = None
 
                     # Save the commission order (this will calculate formulated fields automatically)
                     success, message = self.save_commission_order(commission_data)
@@ -692,20 +616,6 @@ class SupabaseDBManager:
 
         except Exception as e:
             return False, f"Error recalculando campos: {str(e)}"
-
-    def refresh_data(self) -> Tuple[bool, str]:
-        """Refresh data from Supabase database"""
-        try:
-            # Get all orders from database
-            df = self.get_all_orders_df()
-
-            if df.empty:
-                return False, "No se pudieron cargar datos desde Supabase"
-
-            return True, f"✅ Datos actualizados: {len(df)} registros cargados"
-
-        except Exception as e:
-            return False, f"Error actualizando datos: {str(e)}"
 
 
 # Streamlit integration functions

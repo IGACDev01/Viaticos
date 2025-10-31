@@ -7,7 +7,7 @@ import os
 from tab_commission_form import render_commission_form_tab
 from tab_legalization_form import render_additional_form_tab
 from tab_dashboard import render_dashboard_tab
-from utils import initialize_session_state, get_colombian_datetime_now
+from utils import initialize_session_state
 from data_manager import render_database_status, init_database_session
 
 # Page configuration
@@ -169,14 +169,14 @@ def get_cached_database_status():
         return {
             'connected': True,
             'record_count': record_count,
-            'last_update': get_colombian_datetime_now(),
+            'last_update': datetime.now().strftime('%H:%M:%S'),
             'db_type': 'Supabase Cloud Database'
         }
     elif st.session_state.get('database_connected'):
         return {
             'connected': True,
             'loading': True,
-            'last_update': get_colombian_datetime_now()
+            'last_update': datetime.now().strftime('%H:%M:%S')
         }
     return {'connected': False}
 
@@ -395,24 +395,6 @@ def render_admin_tab():
 
     st.markdown("---")
 
-    # Quick refresh section
-    st.markdown('<div class="section-title">🔄 Actualizar Datos</div>', unsafe_allow_html=True)
-
-    col_refresh1, col_refresh2, col_refresh3 = st.columns([2, 2, 2])
-
-    with col_refresh1:
-        if st.button("🔄 Actualizar datos desde Supabase", key="refresh_data_btn", use_container_width=True):
-            with st.spinner("Actualizando datos desde Supabase..."):
-                success, message = st.session_state.database_manager.refresh_data()
-                if success:
-                    st.session_state.excel_data = st.session_state.database_manager.get_all_orders_df()
-                    st.success(message)
-                    st.rerun()
-                else:
-                    st.error(message)
-
-    st.markdown("---")
-
     # Database maintenance section
     st.markdown('<div class="section-title">🔧 Mantenimiento de Base de Datos</div>', unsafe_allow_html=True)
 
@@ -514,7 +496,7 @@ def render_admin_tab():
         if st.session_state.get('database_connected'):
             st.success("✅ Conectado a Supabase")
             st.write("**Estado:** Activo")
-            st.write("**Última actualización:** " + get_colombian_datetime_now())
+            st.write("**Última actualización:** " + datetime.now().strftime('%d/%m/%Y %H:%M:%S'))
         else:
             st.error("❌ No conectado a Supabase")
             st.write("**Estado:** Desconectado")
